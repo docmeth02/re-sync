@@ -1,0 +1,126 @@
+#!/usr/bin/python
+# -*- coding: UTF-8 -*-
+from librewired import rewiredclient, types
+from signal import signal, SIGINT, SIGTERM
+from urlparse import urlparse
+import ConfigParser
+import sys
+import os
+
+
+def load_config(fullpath):
+    config = ConfigParser.ConfigParser()
+    if not os.path.exists(os.path.join(fullpath, 're-sync.conf')):
+        ## Create default config file
+        config.add_section("defaults")
+        config.set("defaults", 'port', '2000')
+        config.set("defaults", 'user', 'guest')
+        config.set("defaults", 'password', '')
+        config.set("defaults", 'nick', 're:sync')
+        config.set("defaults", 'status', 'rsync for wired')
+        config.set("defaults", 'icon', '')
+
+        config.add_section("example.com")
+        config.set("example.com", 'port', '3000')
+        config.set("example.com", 'user', 'resync')
+        config.set("example.com", 'password', 'oink')
+        config.set("example.com", 'nick', 're:sync for example.com')
+        config.set("example.com", 'status', '')
+        config.set("example.com", 'icon', '')
+
+        with open(os.path.join(fullpath, 're-sync.conf'), 'w') as conffile:
+            config.write(conffile)
+    else:
+        try:
+            config.read(os.path.join(fullpath, 're-sync.conf'))
+        except Exception as e:
+            print "Failed to read config file. %s" % e
+            raise SystemExit
+    return config
+
+
+def parse_args(args):
+    params = {}
+    remote = {}
+    local = 0
+    trtype = 0  # 1 down / 2 up
+    for aarg in args[1:]:
+        if "wired://" in aarg[0:8].lower():
+            parser = urlparse(aarg, 'wired')
+            try:
+                if not parser.hostname:
+                    print "No hostname specified"
+                    return 0
+                remote['host'] = parser.hostname
+                remote['path'] = parser[2]
+                if parser.username:
+                    remote['user'] = parser.username
+                if parser.port:
+                    remote['port'] = parser.port
+                if parser.password:
+                    remote['password'] = parser.password
+            except Exception as e:
+                print "Failed to parse wired url: %s" % e
+                return 0
+            if not local:  # first component is remote path -> download
+                trtype = 1
+            continue
+
+        if os.path.exists(aarg):
+            local = aarg
+            if not len(remote): # first component is local path -> upload
+                trtype = 2
+            continue
+
+    return (trtype, params, remote, local)
+
+
+def print_usage():
+    print """re:sync - rsync for zanka wired
+    usage:
+        re-sync [options] srcpath destpath
+
+    options:
+        -v      verbose mode
+        -q      quiet mode
+
+    path:
+        you have to use both a remote and a local path
+
+        local: /my/local/path
+        wired: wired://username:password@my.wiredserv.er/remote/path
+
+        Without adding user, password or port to the remote path, config file
+        defaults will be used. If a section named after the hostname is found
+        in the config file default settings will get overridden.
+    """
+    raise SystemExit
+
+
+class remote():
+    def __init__(self):
+        self.host = 0
+        self.port = 0
+        self.login = 0
+        self.pasword = 0
+        self.shutdown = 0
+        self.librewired = rewiredclient.client(self)
+        self.librewired.start()
+        if not self.librewired.connect(self.host, self.port):
+                print "Failed to connect"
+                self.shutdown = 1
+        if not self.librewired.login('Client', self.login, self.pasword, True):
+                print "Failed to login"
+        sleep(2)
+
+
+fullpath = os.path.dirname(sys.argv[0])
+fullpath = os.path.abspath(fullpath)
+config = load_config(fullpath)
+parameters = parse_args(sys.argv)
+if not parameters:
+    print_usage()
+trtype, params, remote, local = parameters
+if not trtype or not len(remote) or not local:
+    print "Error - specify both a valid local and a remote path"
+    print_usage()
