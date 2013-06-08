@@ -139,11 +139,11 @@ class resyncclient():
         if not remotefile.stat():
             self.echo("%s does not exist on server" % self.remotepath)
             self.doshutdown()
+        self.echo("Starting sync ...")
         if self.trtype == 1:  # 1 down / 2 up
             self.transfer = self.librewired.download(self.local, self.remotepath)
         if self.trtype == 2:  # 1 down / 2 up
             self.transfer = self.librewired.upload(self.local, self.remotepath)
-        self.echo("Starting sync ...")
         while not self.shutdown and not self.done:
             status = self.transfer.status()
             print status
