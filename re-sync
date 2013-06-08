@@ -62,6 +62,7 @@ def parse_args(args, validargs):
                 if parser.port:
                     remote['port'] = parser.port
                 if parser.password:
+                    print parser.password
                     remote['password'] = parser.password
             except Exception as e:
                 print "Failed to parse wired url: %s" % e
@@ -139,7 +140,7 @@ class resyncclient():
             self.librewired.port = self.remote['port']
         if 'user' in self.remote:
             self.librewired.username = self.remote['user']
-        if 'pasword' in self.remote:
+        if 'password' in self.remote:
             self.librewired.password = self.remote['password']
         self.librewired.address = self.remote['host']
         ## validiate config here
