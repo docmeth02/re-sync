@@ -3,6 +3,7 @@
 from librewired import rewiredclient, types
 from signal import signal, SIGINT, SIGTERM
 from urlparse import urlparse
+from time import time, sleep
 import ConfigParser
 import sys
 import os
@@ -39,12 +40,15 @@ def load_config(fullpath):
     return config
 
 
-def parse_args(args):
-    params = {}
+def parse_args(args, validargs):
+    params = []
     remote = {}
     local = 0
     trtype = 0  # 1 down / 2 up
     for aarg in args[1:]:
+        if aarg in validargs:
+            params.append(aarg)
+            continue
         if "wired://" in aarg[0:8].lower():
             parser = urlparse(aarg, 'wired')
             try:
@@ -68,7 +72,7 @@ def parse_args(args):
 
         if os.path.exists(aarg):
             local = aarg
-            if not len(remote): # first component is local path -> upload
+            if not len(remote):  # first component is local path -> upload
                 trtype = 2
             continue
 
@@ -97,30 +101,105 @@ def print_usage():
     raise SystemExit
 
 
-class remote():
-    def __init__(self):
+class resyncclient():
+    def __init__(self, config, parameters):
+        self.config = config
+        self.type, self.params, self.remote, self.local = parameters
         self.host = 0
         self.port = 0
         self.login = 0
+        self.done = 0
         self.pasword = 0
         self.shutdown = 0
+        self.verbose = 0
+        self.quiet = 0
+        if '-v' in self.params:
+            self.verbose = 1
+        if '-q' in self.params:
+            self.quiet = 1
         self.librewired = rewiredclient.client(self)
         self.librewired.start()
-        if not self.librewired.connect(self.host, self.port):
-                print "Failed to connect"
-                self.shutdown = 1
-        if not self.librewired.login('Client', self.login, self.pasword, True):
-                print "Failed to login"
-        sleep(2)
+        self.sig1 = signal(SIGINT, self.doshutdown)
+        self.sig2 = signal(SIGTERM, self.doshutdown)
+
+    def run(self):
+        if not self.setup_remote():
+            self.doshutdown()
+        self.connect()
+        while not self.shutdown and not self.done:
+            print "loop"
+            sleep(1)
+
+    def setup_remote(self):
+        self.apply_host_from_config('defaults')  # shouldn't fail
+        self.apply_host_from_config(self.remote['host'])  # might fail
+        if 'host' in self.remote:
+            self.librewired.address = self.remote['host']
+        if 'port' in self.remote:
+            self.librewired.port = self.remote['port']
+        if 'user' in self.remote:
+            self.librewired.username = self.remote['user']
+        if 'pasword' in self.remote:
+            self.librewired.password = self.remote['password']
+        self.librewired.address = self.remote['host']
+        ## validiate config here
+        return 1
+
+    def apply_host_from_config(self, section):
+        if not self.config.has_section(section):
+            return 0
+        self.librewired.nick = self.config.get(str(section), 'nick')
+        self.librewired.status = self.config.get(str(section), 'status')
+        if self.config.get(str(section), 'icon'):
+            self.librewired.loadIcon(self.config.get(str(section), 'icon'))
+        self.librewired.port = self.config.get(str(section), 'port')
+        self.librewired.username = self.config.get(str(section), 'user')
+        self.librewired.password = self.config.get(str(section), 'password')
+        return 1
+
+    def connect(self):
+        self.echo("Connecting to %s:%s ..." % (self.librewired.address, self.librewired.port), False)
+        if not self.librewired.connect(self.librewired.address, self.librewired.port):
+                self.echo("Failed to connect")
+                self.doshutdown()
+        self.echo(" connected.")
+        self.echo("Logging in as user %s ..." % self.librewired.username, False)
+        if not self.librewired.login(self.librewired.nick, self.librewired.username, self.librewired.password, True):
+                self.echo("Failed to login")
+                self.doshutdown()
+        self.echo(" logged in.")
+        sleep(2)  # give it some time ...
+
+    def doshutdown(self, *args):
+        if self.librewired:
+            with self.librewired.lock:
+                self.librewired.keepalive = 0
+                if self.librewired.loggedin:
+                    self.librewired.logout()
+                if self.librewired.connected:
+                    self.librewired.disconnect()
+                if self.librewired.isAlive():
+                    self.librewired.join(5)
+        raise SystemExit
+
+    def echo(self, msg, newline = True):
+        if not self.quiet:
+            sys.stdout.write(msg)
+            if newline:
+                sys.stdout.write('\n')
+
 
 
 fullpath = os.path.dirname(sys.argv[0])
 fullpath = os.path.abspath(fullpath)
+validargs = ['-v', '-q']
 config = load_config(fullpath)
-parameters = parse_args(sys.argv)
+parameters = parse_args(sys.argv, validargs)
 if not parameters:
     print_usage()
 trtype, params, remote, local = parameters
 if not trtype or not len(remote) or not local:
     print "Error - specify both a valid local and a remote path"
     print_usage()
+resync = resyncclient(config, parameters)
+resync.run()
