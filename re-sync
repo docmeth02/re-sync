@@ -1,9 +1,10 @@
 #!/usr/bin/python
 # -*- coding: UTF-8 -*-
-from librewired import rewiredclient, types
+from librewired import rewiredclient, types, wiredfiles
 from signal import signal, SIGINT, SIGTERM
 from urlparse import urlparse
 from time import time, sleep
+from re import sub
 import ConfigParser
 import sys
 import os
@@ -49,8 +50,8 @@ def parse_args(args, validargs):
         if aarg in validargs:
             params.append(aarg)
             continue
-        if "wired://" in aarg[0:8].lower():
-            parser = urlparse(aarg, 'wired')
+        if "wired://" in sub(r'(?<!\\)\\', '', aarg)[0:8].lower():
+            parser = urlparse(sub(r'(?<!\\)\\', '', aarg), 'wired')
             try:
                 if not parser.hostname:
                     print "No hostname specified"
@@ -62,7 +63,6 @@ def parse_args(args, validargs):
                 if parser.port:
                     remote['port'] = parser.port
                 if parser.password:
-                    print parser.password
                     remote['password'] = parser.password
             except Exception as e:
                 print "Failed to parse wired url: %s" % e
@@ -71,8 +71,8 @@ def parse_args(args, validargs):
                 trtype = 1
             continue
 
-        if os.path.exists(aarg):
-            local = aarg
+        if os.path.exists(sub(r'(?<!\\)\\', '', aarg)):
+            local = sub(r'(?<!\\)\\', '', aarg)
             if not len(remote):  # first component is local path -> upload
                 trtype = 2
             continue
@@ -105,7 +105,7 @@ def print_usage():
 class resyncclient():
     def __init__(self, config, parameters):
         self.config = config
-        self.type, self.params, self.remote, self.local = parameters
+        self.trtype, self.params, self.remote, self.local = parameters
         self.host = 0
         self.port = 0
         self.login = 0
@@ -114,6 +114,7 @@ class resyncclient():
         self.shutdown = 0
         self.verbose = 0
         self.quiet = 0
+        self.remotepath = 0
         if '-v' in self.params:
             self.verbose = 1
         if '-q' in self.params:
@@ -127,9 +128,30 @@ class resyncclient():
         if not self.setup_remote():
             self.doshutdown()
         self.connect()
-        while not self.shutdown and not self.done:
-            print "loop"
+        for i in range(1, 10):  # wait until we're logged in
+            if self.librewired.loggedin:
+                break
             sleep(1)
+        if not self.librewired.loggedin:
+            self.doshutdown()  # failed to login
+        remotefile = wiredfiles.wiredfile(self.librewired)
+        remotefile.path = self.remotepath
+        if not remotefile.stat():
+            self.echo("%s does not exist on server" % self.remotepath)
+            self.doshutdown()
+        if self.trtype == 1:  # 1 down / 2 up
+            self.transfer = self.librewired.download(self.local, self.remotepath)
+        if self.trtype == 2:  # 1 down / 2 up
+            self.transfer = self.librewired.upload(self.local, self.remotepath)
+        self.echo("Starting sync ...")
+        while not self.shutdown and not self.done:
+            status = self.transfer.status()
+            print status
+            if status['complete']:
+                self.done = 1
+            sleep(1)
+        self.echo("Sync done.")
+        self.doshutdown()
 
     def setup_remote(self):
         self.apply_host_from_config('defaults')  # shouldn't fail
@@ -143,6 +165,7 @@ class resyncclient():
         if 'password' in self.remote:
             self.librewired.password = self.remote['password']
         self.librewired.address = self.remote['host']
+        self.remotepath = self.remote['path']
         ## validiate config here
         return 1
 
@@ -183,12 +206,11 @@ class resyncclient():
                     self.librewired.join(5)
         raise SystemExit
 
-    def echo(self, msg, newline = True):
+    def echo(self, msg, newline=True):
         if not self.quiet:
             sys.stdout.write(msg)
             if newline:
                 sys.stdout.write('\n')
-
 
 
 fullpath = os.path.dirname(sys.argv[0])
