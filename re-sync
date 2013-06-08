@@ -162,7 +162,7 @@ class resyncclient():
                     direction = " <-"
                 if self.trtype == 2:
                     direction = " ->"
-                sys.stdout.write("%s %s (%2d%%) @ %s/s" % (direction, name, percent, rate))
+                sys.stdout.write("%s %s (%2d%%) @ %s/s" % (direction, name, percentage, rate))
             sys.stdout.flush()
             if status['complete']:
                 self.done = 1
