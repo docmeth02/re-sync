@@ -5,7 +5,7 @@ from signal import signal, SIGINT, SIGTERM
 from urlparse import urlparse
 from time import time, sleep
 from re import sub
-from logging import getLogger, NullHandler
+from logging import getLogger, NullHandler, StreamHandler, DEBUG
 import ConfigParser
 import sys
 import os
@@ -103,6 +103,15 @@ def print_usage():
     raise SystemExit
 
 
+def format_bytes(size):
+    for x in [' bytes', ' KB', ' MB', ' GB']:
+        if size < 1024.0 and size > -1024.0:
+            size = "%3.1f%s" % (size, x)
+            return size
+        size /= 1024.0
+    return "%3.1f%s" % (size, ' TB')
+
+
 class resyncclient():
     def __init__(self, config, parameters):
         self.config = config
@@ -149,8 +158,8 @@ class resyncclient():
         while not self.shutdown and not self.done:
             status = self.transfer.status()
             percent = (status['bytesdone'] * 100) / status['bytes']
-            sys.stdout.write("\r")
-            sys.stdout.write("Syncing (%s/%s/%2d%%)" % (status['done'], status['totalfiles'], percent))
+            self.echo("\r", 0)
+            self.echo("Syncing (%s/%s/%2d%%)" % (status['done'], status['totalfiles'], percent), 0)
             #sys.stdout.write("%2d%%" % percent)
             current = self.transfer.getActiveTransfer()
             if current:
@@ -162,11 +171,12 @@ class resyncclient():
                     direction = " <-"
                 if self.trtype == 2:
                     direction = " ->"
-                sys.stdout.write("%s %s (%2d%%) @ %s/s" % (direction, name, percentage, rate))
-            sys.stdout.flush()
+                self.echo("%s %s (%2d%%) @ %s/s" % (direction, name, percentage, rate), 0)
+                self.flush()
             if status['complete']:
                 self.done = 1
             sleep(1)
+        self.echo("")
         self.echo("Sync done.")
         self.doshutdown()
 
@@ -221,8 +231,7 @@ class resyncclient():
                     self.librewired.disconnect()
                 if self.librewired.isAlive():
                     self.librewired.join(5)
-        sys.stdout.write("\n")
-        sys.stdout.flush()
+        self.echo("\n", False)
         raise SystemExit
 
     def echo(self, msg, newline=True):
@@ -231,15 +240,9 @@ class resyncclient():
             if newline:
                 sys.stdout.write('\n')
 
-
-def format_bytes(size):
-    for x in [' bytes', ' KB', ' MB', ' GB']:
-        if size < 1024.0 and size > -1024.0:
-            size = "%3.1f%s" % (size, x)
-            return size
-        size /= 1024.0
-    return "%3.1f%s" % (size, ' TB')
-
+    def flush(self):
+        if not self.quiet:
+            sys.stdout.flush()
 
 fullpath = os.path.dirname(sys.argv[0])
 fullpath = os.path.abspath(fullpath)
@@ -253,7 +256,12 @@ if not trtype or not len(remote) or not local:
     print "Error - specify both a valid local and a remote path"
     print_usage()
 logger = getLogger('lib:re:wired')
-handler = NullHandler()
-logger.addHandler(handler)
+if '-v' in params:
+    handler = StreamHandler()
+    logger.addHandler(handler)
+    logger.setLevel(DEBUG)
+else:
+    handler = NullHandler()
+    logger.addHandler(handler)
 resync = resyncclient(config, parameters)
 resync.run()
