@@ -1,5 +1,17 @@
-re:sync - rsync for zanka wired
+re:sync - rsync clone for zanka wired
+    usage:
+        re-sync [options] srcpath destpath
 
-Documentation
--------------
-soon
+    options:
+        -v      verbose mode
+        -q      quiet mode
+
+    path:
+        you have to use both a remote and a local path
+
+        local: /my/local/path
+        wired: wired://username:password@my.wiredserv.er/remote/path
+
+        Without adding user, password or port to the remote path, config file
+        defaults will be used. If a section named after the hostname is found
+        in the config file default settings will get overridden.

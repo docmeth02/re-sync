@@ -82,7 +82,7 @@ def parse_args(args, validargs):
 
 
 def print_usage():
-    print """re:sync - rsync for zanka wired
+    print """re:sync - rsync clone for zanka wired
     usage:
         re-sync [options] srcpath destpath
 
