@@ -132,6 +132,7 @@ class resyncclient():
         self.librewired = rewiredclient.client(self)
         self.librewired.start()
         self.librewired.appname = "re:sync powered by lib:re:wired"
+        self.librewired.autoreconnect = 0
         self.sig1 = signal(SIGINT, self.doshutdown)
         self.sig2 = signal(SIGTERM, self.doshutdown)
 
@@ -155,7 +156,7 @@ class resyncclient():
             self.transfer = self.librewired.download(self.local, self.remotepath)
         if self.trtype == 2:  # 1 down / 2 up
             self.transfer = self.librewired.upload(self.local, self.remotepath)
-        while not self.shutdown and not self.done:
+        while not self.shutdown and not self.done and self.librewired.connected:
             status = self.transfer.status()
             percent = (status['bytesdone'] * 100) / status['bytes']
             self.echo("\r", 0)
@@ -176,8 +177,12 @@ class resyncclient():
             if status['complete']:
                 self.done = 1
             sleep(1)
-        self.echo("")
-        self.echo("Sync done.")
+        if status['complete']:
+            self.echo("")
+            self.echo("Sync done.")
+        elif not self.librewired.connected:
+            self.echo("")
+            self.echo("failed. Connection to server was lost.")
         self.doshutdown()
 
     def setup_remote(self):
