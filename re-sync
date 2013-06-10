@@ -158,10 +158,12 @@ class resyncclient():
             self.transfer = self.librewired.upload(self.local, self.remotepath)
         while not self.shutdown and not self.done and self.librewired.connected:
             status = self.transfer.status()
-            percent = (status['bytesdone'] * 100) / status['bytes']
+            try:
+                percent = (status['bytesdone'] * 100) / status['bytes']
+            except ZeroDivisionError:
+                percent = 0
             self.echo("\r", 0)
             self.echo("Syncing (%s/%s/%2d%%)" % (status['done'], status['totalfiles'], percent), 0)
-            #sys.stdout.write("%2d%%" % percent)
             current = self.transfer.getActiveTransfer()
             if current:
                 name, rate, bytesdone, size = current
