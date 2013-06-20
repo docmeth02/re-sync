@@ -21,7 +21,7 @@ def load_config(fullpath):
         config.set("defaults", 'password', '')
         config.set("defaults", 'nick', 're:sync')
         config.set("defaults", 'status', 'rsync for wired')
-        config.set("defaults", 'icon', '')
+        config.set("defaults", 'icon', 'icon.png')
 
         config.add_section("example.com")
         config.set("example.com", 'port', '3000')
@@ -29,7 +29,7 @@ def load_config(fullpath):
         config.set("example.com", 'password', 'oink')
         config.set("example.com", 'nick', 're:sync for example.com')
         config.set("example.com", 'status', '')
-        config.set("example.com", 'icon', '')
+        config.set("example.com", 'icon', 'icon.png')
 
         with open(os.path.join(fullpath, 're-sync.conf'), 'w') as conffile:
             config.write(conffile)
@@ -206,10 +206,20 @@ class resyncclient():
     def apply_host_from_config(self, section):
         if not self.config.has_section(section):
             return 0
+        fullpath = os.path.dirname(sys.argv[0])
+        fullpath = os.path.abspath(fullpath)
         self.librewired.nick = self.config.get(str(section), 'nick')
         self.librewired.status = self.config.get(str(section), 'status')
         if self.config.get(str(section), 'icon'):
-            self.librewired.loadIcon(self.config.get(str(section), 'icon'))
+            path = self.config.get(str(section), 'icon')
+            if os.path.exists(path):
+                pass
+            elif os.path.exists(os.path.join(fullpath, path)):
+                path = os.path.join(fullpath, path)
+            else:
+                path = 0
+            if path:
+                self.librewired.loadIcon(path)
         self.librewired.port = self.config.get(str(section), 'port')
         self.librewired.username = self.config.get(str(section), 'user')
         self.librewired.password = self.config.get(str(section), 'password')
