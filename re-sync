@@ -100,7 +100,7 @@ def print_usage():
         defaults will be used. If a section named after the hostname is found
         in the config file default settings will get overridden.
     """
-    raise SystemExit
+    sys.exit(0)
 
 
 def format_bytes(size):
@@ -138,19 +138,19 @@ class resyncclient():
 
     def run(self):
         if not self.setup_remote():
-            self.doshutdown()
+            self.doshutdown(1)
         self.connect()
-        for i in range(1, 10):  # wait until we're logged in
+        for i in range(1, 30):  # wait until we're logged in
             if self.librewired.loggedin:
                 break
             sleep(1)
         if not self.librewired.loggedin:
-            self.doshutdown()  # failed to login
+            self.doshutdown(1)  # failed to login
         remotefile = wiredfiles.wiredfile(self.librewired)
         remotefile.path = self.remotepath
         if not remotefile.stat():
             self.echo("%s does not exist on server" % self.remotepath)
-            self.doshutdown()
+            self.doshutdown(1)
         self.echo("Starting sync ...")
         if self.trtype == 1:  # 1 down / 2 up
             self.transfer = self.librewired.download(self.local, self.remotepath)
@@ -182,10 +182,12 @@ class resyncclient():
         if status['complete']:
             self.echo("")
             self.echo("Sync done.")
+            self.doshutdown(0)
         elif not self.librewired.connected:
             self.echo("")
             self.echo("failed. Connection to server was lost.")
-        self.doshutdown()
+        self.doshutdown(1)
+
 
     def setup_remote(self):
         self.apply_host_from_config('defaults')  # shouldn't fail
@@ -229,16 +231,16 @@ class resyncclient():
         self.echo("Connecting to %s:%s ..." % (self.librewired.address, self.librewired.port), False)
         if not self.librewired.connect(self.librewired.address, self.librewired.port):
                 self.echo("Failed to connect")
-                self.doshutdown()
+                self.doshutdown(1)
         self.echo(" connected.")
         self.echo("Logging in as user %s ..." % self.librewired.username, False)
         if not self.librewired.login(self.librewired.nick, self.librewired.username, self.librewired.password, True):
                 self.echo("Failed to login")
-                self.doshutdown()
+                self.doshutdown(1)
         self.echo(" logged in.")
         sleep(2)  # give it some time ...
 
-    def doshutdown(self, *args):
+    def doshutdown(self, signal=1, *args):
         if self.librewired:
             with self.librewired.lock:
                 self.librewired.keepalive = 0
@@ -249,7 +251,7 @@ class resyncclient():
                 if self.librewired.isAlive():
                     self.librewired.join(5)
         self.echo("\n", False)
-        raise SystemExit
+        sys.exit(signal)
 
     def echo(self, msg, newline=True):
         if not self.quiet:
